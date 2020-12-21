@@ -34,6 +34,9 @@
 						<li><a href="#high-level">High-Level</a></li>
 						<li><a href="#baseline">Baseline</a></li>
 						<li><a href="#full-system">Full System</a></li>
+						<li><a href="#testing">Testing</a></li>
+						<li><a href="#results">Results</a></li>
+						<li><a href="#conclusion">Conclusion</a></li>
 					</ul>
 				</nav>
 			</div>
@@ -744,6 +747,432 @@
 					the requested
 					number of iterations over the L-System string. The read/write addresses for A and B are set to zero to prepare
 					to handle the next L-System after heading back to <code>RESET_SYSTEM</code>.</p>
+				<h3>Graphing</h3>
+				<p>Our top level, <code>DE1_SoC_Computer.v</code>, serves as the bridge between the user inputs and the
+					<code>create_system</code> module.
+					In addition, it holds the graphing finite state machine.
+				</p>
+				<p>Writing to the VGA screen utilizes three signals: <code>vga_sram_write</code>, <code>vga_sram_address</code>,
+					and <code>vga_sram_write</code>
+					is a one bit write enable signal—if it’s 1, the VGA will be written to. <code>vga_sram_address</code> is a
+					32 bit value attributed to an address in the space of the screen, where the base address is 32’b0.
+					<code>vga_sram_writedata</code> is an eight bit value corresponding to the data to be written at
+					<code>vga_sram_address</code>,
+					specifically the color of the pixel located at that address.
+				</p>
+				<p>The output PIO ports (from the ARM to the FPGA) allow for user interaction through the terminal to change the
+					<code>lsystem</code>, <code>axiom</code>, number of iterations, length and color of lines, as well as the
+					initial coordinates, <code>start_x</code>
+					and <code>start_y</code>. There is also an output PIO port that sends the <code>reset</code> signal, driven by
+					the HPS. In
+					addition, an
+					input PIO port sends <code>timer_counter</code> from the FPGA to the ARM in order to calculate the timing
+					information of
+					the system.
+				</p>
+				<p>We instantiate a module of <code>create_system</code> to send over required values. Particularly, the
+					<code>top_rdy</code>
+					and
+					<code>system_val</code> wires allow for a handshake between the modules, so that the top level FSM does not
+					start graphing
+					too early.
+				</p>
+				<img src="images/trig_sketch.png" style="display:block;margin: 0 auto;">
+				<p>There is also an instantiation of <code>signed_mult</code>, called <code>triangle_mult</code>, which
+					calculates the target pixel
+					required for the 60° based diagonal lines. Remembering trigonometry, we know that the horizontal step size is
+					<code>length</code>/2, which can be calculated by shifting <code>length</code> by 1. However, the vertical
+					step size is
+					sqrt(3)<code>length</code>/2,
+					which cannot be so easily calculated with bitwise operations. Thus, we use 11.21 fixed point multiplication.
+					The inputs to this module are <code>root_three</code> (sqrt(3) represented in 11.21 fixed point), and
+					<code>x_triangle_length</code>,
+					the 11.21 fixed point version of <code>length</code> >> 1. The output is <code>y_triangle_length</code>. For
+					use in
+					graphing to pixels,
+					the integer bits [30:21], are used in calculations. These bits omit the signed bit in the fixed point integer,
+					which causes a limitation in calculation values off off the screen in the negative direction.
+				</p>
+				<img src="images/top_level_fsm.png" style="display:block;margin: 0 auto; width:95%; height: 95%">
+				<br>
+				<p>The 10 state top level FSM is triggered on the positive rising edge of the 50MHz clock. We consider this FSM
+					to be modular—as in, some states are chosen based on which L-System is being graphed.
+					<code>timer_counter_reg</code> is
+					incremented in every state except for <code>TOP_RESET</code> and <code>TOP_DONE</code>, to provide timing
+					information for the whole
+					system.
+				</p>
+				<p>The first state is <code>TOP_RESET</code>, which is entered at the <code>reset</code> signal from the HPS. In
+					this state,
+					<code>angle_increment</code> is set based on what is required for the <code>lsystem</code> entered. If the
+					<code>reset</code> signal is
+					sent again,
+					the FSM will stay in this state. Otherwise, it will move onto <code>TOP_WAIT</code>.
+				</p>
+				<p>In <code>TOP_WAIT</code>, the <code>system_done</code> wire from <code>create_system</code> is checked. If it
+					is high, the
+					FSM moves
+					into the
+					<code>TOP_DONE</code> state. If not, there are two conditions. If the <code>system_val</code> wire is low, the
+					<code>top_rdy_reg</code>
+					is set high,
+					and the FSM stays in <code>TOP_WAIT</code>. If <code>system_val</code> is high, <code>top_rdy_reg</code> is
+					set low,
+					<code>system_output_string_reg</code> is set
+					based on the <code>system_output_string</code> wire from <code>create_system</code>, and the FSM moves into
+					<code>TOP_SETUP</code>.
+				</p>
+				<p>
+					The <code>TOP_SETUP</code> state is used to make sure all relevant registers have the most updated values. In
+					particular,
+					<code>top_char_reg</code> is set to <code>system_output_string_reg</code>, so that graphing rules can be
+					applied to this character in
+					the following state. The FSM then moves on to <code>TOP_TARGET</code>.
+				</p>
+				<p>In <code>TOP_TARGET</code>, either the target pixels (<code>targetx_reg</code> and <code>targety_reg</code>)
+					or the
+					direction of drawing (<code>angle_reg</code>)
+					are set based on what <code>top_char_reg</code> is. For the drawing characters (F and A),
+					<code>targetx_reg</code> and
+					<code>targety_reg</code> are
+					set based on <code>angle_reg</code>; If <code>angle_reg</code> is 0 or 180 (vertical) or 90 or 270
+					(horizontal), either <code>targetx_reg</code> or
+					<code>targety_reg</code> are incremented by <code>length</code>. If <code>angle_reg</code> is 60, 120, 240, or
+					300, a
+					diagonal line is needed, and
+					the target coordinates are instead incremented using the step sizes calculated using the
+					<code>signed_mult</code> module
+					(<code>x_triangle_length</code> and <code>y_triangle_length</code>). If <code>top_char_reg</code> is either +
+					or -, <code>angle_reg</code> is incremented or
+					decremented by the <code>angle_increment</code> value set in <code>TOP_RESET</code>. In cases where the
+					resulting angle would be set to
+					360, it is reset to 0 for ease in future calculations. Next, the FSM goes into <code>TOP_BOUND_CHECK</code>.
+				</p>
+				<p><code>TOP_BOUND_CHECK</code> chooses which graphing state to go to based on what <code>lsystem</code> is. It
+					also chooses
+					to skip the
+					graphing states if the target coordinates are outside of the screen, and go directly to
+					<code>TOP_SHIFT</code>.
+				</p>
+				<p>
+					All three graphing states do an additional check on the bounds, and set the write enable,
+					<code>vga_sram_write</code> low
+					in the case of an offscreen pixel. This allows for a line with target coordinates outside the graphing region
+					to draw up until the edges of the screen.
+				</p>
+				<p><code>TOP_GRAPH_DRAGON</code> is named after our first successfully implemented <code>lsystem</code>, the
+					dragon curve,
+					and is the
+					graphing state for purely horizontal and vertical lines. In this state, either <code>x_reg</code> or
+					<code>y_reg</code> is
+					incremented
+					in each cycle until the graphed coordinates match the target coordinates. To graph to the screen,
+					<code>vga_sram_address</code> is set to the desired coordinates, <code>vga_sram_writedata</code> is set to the
+					color chosen
+					by the user,
+					and <code>vga_sram_write</code> is set high. Once the coordinates match, the FSM will move on to
+					<code>TOP_SHIFT</code>.
+					However, if
+					either the <code>x_reg</code> or <code>y_reg</code> value exceeds (2^32)-1 (the maximum value that can be held
+					in the 32 bit addresses),
+					the FSM will immediately enter <code>TOP_DONE</code>.
+				</p>
+				<p><code>TOP_GRAPH_TRIANGLE_X</code> and <code>TOP_GRAPH_TRIANGLE_Y</code> are the graphing states used for
+					L-Systems that require
+					diagonal lines. These states cycle between each other to graph 2 pixels horizontally and 5 pixels vertically,
+					and move on to <code>TOP_SHIFT</code> once the graphed coordinates has passed or is equal to the target
+					coordinates. This
+					is a limiting way to graph diagonal lines, as it requires that the minimum side length is at least 7 to result
+					in a line that is reasonably diagonal. However, constrained by the pixels on the screen, we found this to be a
+					fairly accurate way to draw lines with our desired slope.</p>
+				<p>The <code>TOP_SHIFT</code> state sets the <code>top_graphing_reg</code> to 2. This is a wire checked by
+					<code>create_system</code> before
+					incrementing <code>iterations_counter_reg</code>. After this state, the FSM returns to <code>TOP_WAIT</code>.
+				</p>
+				<p>The final state in the top level graphing FSM is <code>TOP_DONE</code>. At this point, all graphing for the
+					inputted
+					L-System has been completed, and the final value of <code>timer_counter_reg</code> is used for the timing
+					calculations. The
+					FSM will stay in this state until the <code>reset</code> signal is sent by the HPS to bring the FSM back to
+					<code>TOP_RESET</code>.
+				</p>
+				<h3>User Interface</h3>
+				<p>As previously mentioned, the HPS handles user inputs as well as printing valuable information to the terminal
+					window. This code can be found in <code>graphics.c</code>. Here is an overview of the PIO ports and the
+					associated actions
+					done by the HPS.</p>
+				<p><code>lsystem</code>: before asking for a user input for this 3-bit output PIO port, the HPS prints out the
+					available
+					L-Systems and the numbers associated with them. If the user enters an invalid character, the prompt is
+					replayed.</p>
+				<p><code>axiom</code>: Once a valid L-System has been chosen, the HPS asks for a user input for the 32-bit
+					output PIO port,
+					axiom. Before asking for it, however, the HPS prints some key information to enhance usability, including: the
+					default axiom for the chosen L-System, the rule-making characters in that L-System, which characters enable
+					drawing for that L-System, and finally, all available characters for use in the axiom. This information allows
+					the user to either input the default axiom (without having to look it up), or create their own unique axiom.
+				</p>
+				<p><code>iterations</code>: This 4-bit output PIO port holds the user inputted value for the number of
+					iterations. Table 3
+					shows our results for the largest number of iterations for each curve that can be supported by our design.</p>
+				<img src="images/max_iterations.png" style="display:block;margin: 0 auto;">
+				<br>
+				<p><code>length</code>: This 5-bit output PIO port holds the user inputted value for the length of each line.
+					This value’s
+					bounds are checked before moving on to the next user input. The maximum value of length is limited by the size
+					of the PIO port, so it must be less than 31. While that is the maximum allowed, the user must be cognizant
+					that lower values are often needed to project the curve within the graphable region of the screen. The minimum
+					length varies based on the chosen <code>lsystem</code>. For L-Systems that rely on purely horizontal and
+					vertical lines,
+					the minimum length is 3, in order to properly visualize squares. For L-Systems that contain diagonal lines,
+					the minimum length is 7, in order to properly visualize the slope of the diagonals.</p>
+				<p><code>color</code>: This 8-bit output PIO port holds the user inputted value for the color of the L-System.
+					The HPS prints
+					out the available 8-colors that have been hardcoded. If the user input does not match any of the options, the
+					system defaults to white (0xff).</p>
+				<p><code>start_x</code> and <code>start_y</code>: These are 10-bit output PIO ports that hold the initial
+					coordinates for graphing.
+					<code>start_x</code> is the horizontal coordinate, and is bounded by the left and right sides of the screen (1
+					to 638).
+					<code>start_y</code> is the vertical coordinate, and is bounded by the top and bottom of the screen (1 to
+					478).
+				</p>
+				<p><code>reset</code>: this 1-bit output PIO port allows the <code>reset</code> signal to be sent to the ARM.
+					Once the screen
+					is cleared,
+					the user can press any key to toggle this signal and begin the graphing process.</p>
+				<p><code>timer_counter</code>: This 32-bit input PIO Port receives this value, which was incremented during
+					every cycle of
+					the top level FSM (except during the states <code>TOP_WAIT</code> and <code>TOP_DONE</code>). This value is
+					then scaled from the number
+					of cycles of the 50MHz clock to a recognizable time in seconds, which is printed to the terminal screen.</p>
+				<p>Once the L-System has been graphed, the user is given the option to either zoom in, zoom out, pan to new
+					coordinates, or begin a new L-System. The first three options modify either the <code>length</code> or the
+					starting
+					coordinates on the C-side of the program, and send the new values to the ARM, where the modified curve is
+					re-calculated and graphed again.</p>
+			</section>
+		</div>
+		<br id="testing">
+		<div class="box container">
+			<section>
+				<h2>Testing</h2>
+				<p>In the past we’ve suffered from biting off more than what we can chew, aka building a large chunk of the
+					project before testing. This wasn’t a trap we’d be able to fall into this time, especially considering that
+					this project is our own ideation—there’s no reference code to rely on when debugging. With this in mind, we
+					worked through every module carefully and tested thoroughly along the way. We also initially focused our
+					efforts on solely the dragon curve, as the 90 degree increments made for more straightforward graphing.
+				</p>
+				<p>The first hurdle was the <code>rules</code> module. There were multiple ways to structure it: one module per
+					L-System to house
+					all of its specific rules, one module per character that would select between rules for each L-System, one
+					all-encompassing module with every single rule for every single L-System. Ultimately we chose the last design,
+					as we realized that it only required a single input wire to be able to toggle between rule implementations for
+					different L-Systems. Once that had been decided, we implemented the module as a case statement outputting to a
+					statically-sized register. Though we knew we wanted to utilize M10Ks for their storage capabilities, we’ve had
+					bad experiences with them in the past and therefore wanted to hammer down our core functionality before
+					complicating it with reading/writing to memory.</p>
+				<p>We used ModelSim to verify the outputs and intermediate values. The output register was simple to verify as
+					it simply needed to be compared to the expected output string of the L-System rule. This result wasn’t being
+					sent byte-by-byte either, so there were no timing issues to consider. We did run into the issue of the
+					characters not being accepted by the case conditions and instead falling into the default case, a behavior we
+					noted through displaying the <code>rule_done</code> signal (which, rather than being a single bit value to
+					toggle between
+					zero and one, was a two bit signal that was set to a different value in every case). This was solved by
+					defining the ASCII codes for each character as strict eight-bit localparams and constraining the module to
+					only accept a single character byte at a time.</p>
+				<p><code>create_system</code> was originally broken into two modules: <code>create_system</code> and
+					<code>process_string</code>. Much
+					like the
+					baseline code, these separate modules iterated over a string and performed multiple iterations on a string,
+					respectively. We decided to combine them into a single module once we began to tackle the issue of graphing
+					via the top level. It wouldn’t be feasible to send over the entire result string from
+					<code>process_string</code> to the
+					top level because we wouldn’t know how large it was. Sending the result string byte by byte, with the top
+					level graphing at the same time as the computations, was a viable option, but it would be redundant for both
+					<code>create_system</code> and <code>process_string</code> to be handling strings byte by byte. Even more
+					critically, we needed to be
+					reading and writing to the M10Ks with every iteration, but we weren’t sure about how to have multiple modules
+					safely interact with the same M10Ks in parallel. Therefore, we combined the two, resulting in a rat’s nest of
+					FSM states and signal wires that we had to debug in ModelSim.
+				</p>
+				<p>Before the M10Ks were in use, the result string of the overall system was limited to two bytes, hardly enough
+					to graph a robust L-System. While our code was operational with those limitations, there was no telling what
+					could happen once we allowed it to perform multiple iterations on a larger axiom. Writing to the M10Ks takes
+					multiple cycles per character since we have to write each byte to its own individual address, and reading from
+					the M10Ks requires at least three clock cycles as a buffer. ModelSim was extremely useful when debugging the
+					<code>WRITE_M10K_A/B</code>, <code>INCREMENT_A/B</code>, and <code>READ_M10K</code> states because we could
+					not only see what data was being
+					read/written but also the address at which this was occurring. Being able to see these signals informed us
+					that we didn’t need a separate buffer state for reading, as well as what logic should go into the transitions
+					out of <code>WRITE_M10K_A/B</code>.
+				</p>
+				<p>Initially the axiom was hardcoded in the Verilog to not have to worry about how the terminal serial input was
+					being sent over the PIO ports to the FPGA. After we began to connect the C code with the Verilog, a few
+					confusing bugs arose. First was the issue of the order of characters in the axiom: when hardcoded, we treated
+					the axiom as a normal English string and processed it from left to right, but when looking at the output
+					signals in ModelSim we realized that they were flipped with respect to our expected values. Somehow the 32
+					bits of the axiom are reversed before the FPGA starts its calculations (we’re still unsure as to why this
+					happens, but attribute it potentially to the way memory mapping happens in the C code). In the interest of
+					time, we didn’t dig into the root of this problem but instead patched it by grabbing the least significant
+					byte of the axiom and shifting each byte out to the right, effectively reading the character string from right
+					to left. Another fun behavior to debug was the appearance of unexpected ones in our <code>axiom</code>
+					register as we
+					shifted out bytes. At first we thought it could be the way we were shifting, so we concatenated a zero byte to
+					a substring of the register, but that didn’t fix it. Upon closer inspection of the binary values, we realized
+					that the ENTER presses needed to send the serial input was being included in any input string shorter than
+					four bytes (the maximum length, as dictated by the PIO ports), and these enter presses didn’t have an ASCII
+					code of zero. Our solution was to initialize the character pointer for the axiom to four bytes of ASCII code
+					zero (equivalent to four spaces) so that if a byte wasn’t overwritten by the serial input, it wouldn’t affect
+					the register’s overall ability to be equal to zero (key in most of our transitions).
+				</p>
+				<p>At the start of development, the modular nature of our system made it conducive to testing since all of the
+					signals were separated from each other and provided a good deal of information gain on their own. The
+					introduction of the val/rdy interface between the top level and <code>rules.v</code> complicated our ability
+					to use
+					ModelSim for debugging purposes since the wire values were held for too long. In the context of our full
+					system, ModelSim was useful for debugging the small issues that arose in individual modules but wasn’t a
+					viable tool when the system required more than one iteration on the string.</p>
+				<p>This is when we pivoted to SignalTap as our primary debugging tool. Though it was disadvantaged in the sense
+					that a full compile of the Verilog was needed before SIgnalTap would read the corresponding signals, it was
+					able to show the waveform behavior of the real system, including the Verilog and the C code. A caveat with
+					this is the space required to store all of the hardware signals. Our design uses a good deal of memory through
+					the M10Ks, so there’s a limit to how many data samples SignalTap can acquire. This was a detriment when
+					testing multiple iterations, so we had to use shorter axioms and a smaller number of iterations. The
+					discrepancies in string generation ended up stemming from smaller issues within the modules (such as the ASCII
+					code problem) but not being able to see all of the clock cycles for more than four or five iterations made
+					debugging more difficult.</p>
+				<p>This was especially relevant for M10K debugging, as there was a time when it seemed as though the string
+					being written to memory was much longer than the expected string, a problem that was exacerbated in higher
+					iterations. We weren't sure if it was a problem with our M10K states or M10K memory being cleared. After
+					noticing that this appeared on L-Systems after the first one (so not immediately after the entire board was
+					reset), we moved our <code>CLEAR_M10KS</code> state from the end of the FSM (after the <code>DONE</code>
+					state) to the beginning.
+					Additionally, we realized that as we grew the M10Ks we didn’t adjust the last address to which the M10K needed
+					to be cleared, so <code>CLEAR_M10KS</code> was only clearing part of memory (a pretty big problem since the
+					number of
+					iterations is incremented when an address holding a zero is reached in the M10Ks). This is a problem we had
+					throughout our usage of the M10Ks, as originally they were coded to have 256 memory address (meaning each
+					address needed eight bits) and when we expanded them to 512, 1024, and eventually 8192 we didn’t always adjust
+					the bit widths of the read/write memory addresses.</p>
+				<p>In regard to the top level, we were able to use the printouts to the VGA screen to debug our graphing;
+					particularly, this was helpful as we began to implement diagonal lines. We had decided that we would use
+					fixed-point signed multiplication to calculate our target pixel, and use incremented horizontal and vertical
+					pixels in an approximate ratio to draw lines that would appear diagonal. Our setup included separate states
+					for horizontal and vertical drawing, and they would alternate between each other based on a counter variable
+					(<code>xcounter</code> and <code>ycounter</code>). Other than a brief stint where we were accidently assigning
+					50-bits to one of our
+					32-bit fixed point variables (which caused diagonal lines to wrap all across the screen), this was mostly
+					smooth sailing. Eventually, we realized that our lines were not exactly the right slope for a 60° line, and
+					determined that we had swapped the bound check for <code>xcounter</code> and <code>ycounter</code>. </p>
+				<p>Overall, the focus on developing modular functionality made debugging a more approachable task. ModelSim and
+					SignalTap also made looking closely at every single input, output, and intermediate value only slightly
+					frustrating.</p>
+			</section>
+		</div>
+		<br id="future">
+		<div class="box container">
+			<section>
+				<h2>Future Work</h2>
+				<p>There are several things that could be improved or expanded upon in future implementations of this project.
+					First and foremost, we would refactor the top level coordinate calculations to include signed rather than
+					unsigned variables. While graphing to the screen only requires positive pixel values, we found that
+					calculations outside of the range of the screen would increase graphing robustness, as it would allow for the
+					fractal to return to the screen if it curves back into the graphable region. Currently, our implementation
+					supports calculations involving positive pixels outside the graphable region (i.e. the bottom and right side
+					of the screen), but we encounter overflow for pixels in the negative direction (i.e. the left side and top of
+					the screen).</p>
+				<p>Furthermore, in order to graph more robust diagonal lines, Bresenham’s line algorithm could be implemented.
+					This algorithm would create smooth diagonal lines, and allow us to explore more L-systems based on different
+					angle turns (such as 45° or 36°). </p>
+				<img src="images/levy.png" style="display:block;margin: 0 auto; width: 60%;height: 60%;">
+				<br>
+				<img src="images/pentaplexity.png" style="display:block;margin: 0 auto;width: 60%;height: 60%;">
+				<br>
+				<p>We would also be interested in exploring further user-customization of L-Systems. While the current system
+					allows for customizable axioms, this could be expanded to allow users to create unique L-Systems with custom
+					rules and customizable angle turns. This would provide ease for researchers (or other people interested in
+					fractals) to develop new L-Systems.</p>
+			</section>
+		</div>
+		<br id="results">
+		<div class="box container">
+			<section>
+				<h2>Results</h2>
+				<p>The following are some of the performance metrics of our system. Across the board, the FPGA exhibits a faster
+					computation time than the baseline Python script. For the maximum number of iterations on each of our 6
+					L-systems, the worst speedup was 5.1x, and the best was 77.8x with an average of about 20.04x. This is due to
+					a number of factors including the line length and growth rate.</p>
+				<img src="images/Tessellated Triangle (2).png" style="display:block;margin: 0 auto;">
+				<br>
+				<p>Let’s take a <a href="images/look_at_this_graph.gif">look at this graph</a> above. This chart shows the
+					execution time per character for the Python and
+					FPGA calculating the tessellated triangle. It appears that for the FPGA, there is some initial overhead with
+					the first few iterations. This overhead is nullified by the law of large numbers at higher iterations,
+					allowing the FPGA to settle to around 200 us per character for both the length 7 and length 10 versions.
+					However, this does not appear to be the case for the Python code. The length 7 code takes about 3.6 ms per
+					character, while the length 10 code takes 17ms. Additionally, although this is merely an observation,
+					generally, the less iterations it takes to fill up the M10K blocks, i.e. a higher growth rate, the larger the
+					disparity between the Python and FPGA.
+				</p>
+				<img src="images/Dragon Curve.png" style="display:block;margin: 0 auto;">
+				<br>
+				<img src="images/Sierpinski Arrowhead (1).png" style="display:block;margin: 0 auto;">
+				<br>
+				<img src="images/Cross.png" style="display:block;margin: 0 auto;">
+				<br>
+				<img src="images/Koch Snowflake.png" style="display:block;margin: 0 auto;">
+				<br>
+				<img src="images/Koch Snowflake.png" style="display:block;margin: 0 auto;">
+				<br>
+				<img src="images/Tessellated Triangle.png" style="display:block;margin: 0 auto;">
+				<br>
+				<p>The M10K blocks are a limiting factor in our generation of L-Systems. As shown in these graphs, not all
+					L-Systems are equal in terms of how fast they grow. The maximum number of characters is 8192. However, due to
+					exponential growth, some of the largest systems we can generate are significantly less than this threshold.
+					Additionally, we are sometimes inhibited by the negative value computation difficulty mentioned earlier. Below
+					is a chart of the L-Systems and their maximum size on our system. Generally, there are few differences between
+					the FPGA for edges of length 7 and length 10. For the python, it takes longer to generate the length 10 versus
+					length 7 images. Within the results, there is only one instance of the negative values causing the FPGA to
+					have a lower number of iterations for the length 10 graph than the length 7 graph. In all other cases, the max
+					number of iterations is set by the M10K blocks.
+				</p>
+				<img src="images/compute_times.png" style="display:block;margin: 0 auto;">
+				<br>
+				<iframe style="display:block;margin: 0 auto;" width="560" height="315"
+					src="https://www.youtube.com/embed/NIYnzu1di3o" frameborder="0"
+					allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+					allowfullscreen></iframe>
+			</section>
+		</div>
+		<br id="conclusion">
+		<div class="box container">
+			<section>
+				<h2>Conclusion</h2>
+			</section>
+		</div>
+		<br id="appendix">
+		<div class="box container">
+			<section>
+				<h2>Team</h2>
+
+				<a href="images/baby_yoda_drinking_tea.gif"><img src="images/priya_headshot.JPG"
+						style="display:block;margin: 0 auto; width:30%; height: 30%;"></a>
+				<h4>Priya Kattapurath</h4>
+				<p style="text-align: center;"><i>ECE '20, MEng '21</i></p>
+				<br>
+
+				<a href="images/sleepy_duck.gif"><img src="images/priya_headshot.JPG"
+						style="display:block;margin: 0 auto; width:30%; height: 30%;"></a>
+				<h4>Michael Rivera</h4>
+				<p style="text-align: center;"><i>ECE '20, MEng '20</i></p>
+				<br>
+
+				<a href="images/eggdog.gif"><img src="images/priya_headshot.JPG"
+						style="display:block;margin: 0 auto; width:30%; height: 30%;"></a>
+				<h4>Caitlin Stanton</h4>
+				<p style="text-align: center;"><i>ECE '20, MEng '21</i></p>
+				<br>
 			</section>
 		</div>
 		<footer class="major container medium">
