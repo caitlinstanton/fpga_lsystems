@@ -33,7 +33,7 @@
 						<li><a href="#intro">Introduction</a></li>
 						<li><a href="#high-level">High-Level</a></li>
 						<li><a href="#baseline">Baseline</a></li>
-						<li><a href="#three">Get in touch</a></li>
+						<li><a href="#full-system">Full System</a></li>
 					</ul>
 				</nav>
 			</div>
@@ -125,12 +125,12 @@
 				<p>The alphabet for every phase of our design, no matter the coding language, consists of the following symbols,
 					as shown in Table 1. Each symbol corresponds to a specific action, from graphing (which are consistent across
 					L-Systems) to buffer characters for rule generation (specific to each L-System).</p>
-				<img src="images/pic01.jpg" style="display:block;margin: 0 auto;">
+				<img src="images/alphabet.png" style="display:block;margin: 0 auto;">
 				<br>
 				<p>Though there is an infinite number of combinations of axioms and rules within the given alphabet, the seven
 					L-Systems we developed have preset values for each. We followed these so as to ensure the graphed results
 					would match what was expected. Table 2 shows the axioms and rules for each L-System.</p>
-				<img src="images/pic01.jpg" style="display:block;margin: 0 auto;">
+				<img src="images/lsystems.png" style="display:block;margin: 0 auto;">
 				<br>
 			</section>
 		</div>
@@ -260,11 +260,492 @@
            a -= angle
 </pre>
 				</div>
+				<br>
+				<h3>C</h3>
+				<p>Since Python is an interpreted, high-level language, our next step was to synthesize and graph L-Systems in C
+					code to be run on the FPGA. This did require a Quartus project to be compiled and loaded onto the board, but
+					it wasn’t something that we changed at all. Specifically, we used the “GPU with FAST display from SRAM”
+					project from the ECE 5760 Avalon Bus Master page.
+				</p>
+				<p>The program layout of the Python code corresponds almost entirely with that of the C program, though it only
+					focuses on the dragon curve, not all seven L-Systems. First there is the <code>applyRule_DragonCurve</code>
+					function, which
+					is responsible for receiving a single character and outputting a character pointer to a string. This string is
+					built by putting the input character through a switch-case statement and seeing which condition it matches.
+				</p>
+				<!-- HTML generated using hilite.me -->
+				<div
+					style="background: #ffffff; overflow:auto;width:auto;border:solid gray;border-width:.1em .1em .1em .8em;padding:.2em .6em;">
+					<pre style="margin: 0; line-height: 125%"><span style="font-weight: bold">char</span>* applyRule_DragonCurve(<span style="font-weight: bold">char</span> input) {
+ <span style="font-weight: bold">char</span> tmp[1000000];
+ <span style="font-weight: bold">switch</span>(input) {
+   <span style="font-weight: bold">case</span> <span style="font-style: italic">&#39;X&#39;</span>: {
+     strcpy(tmp,<span style="font-style: italic">&quot;X+YF+&quot;</span>);
+     <span style="font-weight: bold">break</span>;
+   }
+   <span style="font-weight: bold">case</span> <span style="font-style: italic">&#39;Y&#39;</span>: {
+     strcpy(tmp,<span style="font-style: italic">&quot;-FX-Y&quot;</span>);
+     <span style="font-weight: bold">break</span>;
+   }
+   default: {
+     strcpy(tmp, (<span style="font-weight: bold">char</span>[2]) { (<span style="font-weight: bold">char</span>) input, <span style="font-style: italic">&#39;\0&#39;</span> } );
+     <span style="font-weight: bold">break</span>;
+   }
+ }
+ <span style="font-weight: bold">return</span> tmp;
+}
+</pre>
+				</div>
+				<br>
+				<p><code>processString_DragonCurve</code> follows the same logic as <code>processString</code> in the Python. It
+					takes in a
+					character
+					pointer to a string and then iterates on every character to put it through <code>applyRule_DragonCurve</code>.
+					The result
+					string from each call to <code>applyRule_DragonCurve</code> is concatenated together in memory.
+				</p>
+				<!-- HTML generated using hilite.me -->
+				<div
+					style="background: #ffffff; overflow:auto;width:auto;border:solid gray;border-width:.1em .1em .1em .8em;padding:.2em .6em;">
+					<pre style="margin: 0; line-height: 125%"><span style="font-weight: bold">char</span>* processString_DragonCurve(<span style="font-weight: bold">char</span>* prev) {
+	<span style="font-weight: bold">int</span> i = 0;
+	<span style="font-weight: bold">char</span> *tmp;
+	<span style="font-weight: bold">char</span> *check;
+	<span style="font-weight: bold">int</span> length = strlen(prev);
+	<span style="font-weight: bold">for</span> (i = 0; i &lt; length; i++) {
+		check = prev;
+		tmp = applyRule_DragonCurve(prev[i]);
+		strcat(prev, tmp);
+	}
+	<span style="font-weight: bold">return</span> prev;
+ }
+ </pre>
+				</div>
+				<br>
+				<p><code>createSystem_DragonCurve</code> needs the number of iterations and the starting axiom to function. For
+					every number
+					in the range [0, <code>numIters</code>-1] it calls <code>processString_DragonCurve</code> on the string from
+					the previous
+					iteration.</p>
+				<!-- HTML generated using hilite.me -->
+				<div
+					style="background: #ffffff; overflow:auto;width:auto;border:solid gray;border-width:.1em .1em .1em .8em;padding:.2em .6em;">
+					<pre style="margin: 0; line-height: 125%"><span style="font-weight: bold">char</span>* createSystem_DragonCurve(<span style="font-weight: bold">int</span> numIters, <span style="font-weight: bold">char</span>* axiom) {
+ <span style="font-weight: bold">char</span> start[1000000];
+ strcpy(start, axiom);
+ <span style="font-weight: bold">char</span> end[1000000];
+ *end = <span style="font-style: italic">&quot;&quot;</span>;
+ <span style="font-weight: bold">int</span> i = 0;
+ <span style="font-weight: bold">char</span> *check;
+ <span style="font-weight: bold">for</span> (i = 0; i &lt; numIters; i++) {
+   check = processString_DragonCurve(start);
+   *start = end;
+ }
+ <span style="font-weight: bold">return</span> start;
+}
+</pre>
+				</div>
+				<br>
+				<p>Finally, the dragon curve is drawn through the aptly named function <code>draw_DragonCurve</code>. It loops
+					through each
+					character in the character pointer of the L-System string and checks to see what graphing functionality that
+					character possesses. This leans on VGA drawing functions written by Bruce Land.</p>
+			</section>
+			<!-- HTML generated using hilite.me -->
+			<div
+				style="background: #ffffff; overflow:auto;width:auto;border:solid gray;border-width:.1em .1em .1em .8em;padding:.2em .6em;">
+				<pre style="margin: 0; line-height: 125%"><span style="font-weight: bold">void</span> draw_DragonCurve(<span style="font-weight: bold">char</span>* input, <span style="font-weight: bold">int</span> old_x, <span style="font-weight: bold">int</span> old_y) {
+ <span style="font-weight: bold">int</span> a = 0; <span style="font-style: italic">// 0 degrees is straight up vertically</span>
+ <span style="font-weight: bold">int</span> length = 10;
+ <span style="font-weight: bold">int</span> new_x = old_x;
+ <span style="font-weight: bold">int</span> new_y = old_y;
+ <span style="font-weight: bold">int</span> i = 0;
+ <span style="font-weight: bold">char</span> *check = input;
+ printf(<span style="font-style: italic">&quot;GRAPHING STRING: &quot;</span>);
+ <span style="font-weight: bold">while</span>(*check!=<span style="font-style: italic">&#39;\0&#39;</span>)
+     printf(<span style="font-style: italic">&quot;%c&quot;</span>,*check++);
+   printf(<span style="font-style: italic">&quot;</span><span style="font-weight: bold; font-style: italic">\n</span><span style="font-style: italic">&quot;</span>);
+ <span style="font-weight: bold">for</span> (i = 0; i &lt; strlen(input); i++) {
+   <span style="font-weight: bold">if</span>(input[i] == <span style="font-style: italic">&#39;X&#39;</span>) {
+     <span style="font-weight: bold">continue</span>;
+   } <span style="font-weight: bold">else</span> <span style="font-weight: bold">if</span> (input[i] == <span style="font-style: italic">&#39;Y&#39;</span>) {
+     <span style="font-weight: bold">continue</span>;
+   } <span style="font-weight: bold">else</span> <span style="font-weight: bold">if</span> (input[i] == <span style="font-style: italic">&#39;F&#39;</span>) {
+     <span style="font-weight: bold">if</span> (a % 360 == 0) {
+       VGA_line(new_x, new_y, new_x, new_y - length, red);
+       new_x = new_x;
+       new_y = new_y - length;
+     } <span style="font-weight: bold">else</span> <span style="font-weight: bold">if</span> (a % 270 == 0) {
+       VGA_line(new_x, new_y, new_x - length, new_y, yellow);
+       new_x = new_x - length;
+       new_y = new_y;
+     } <span style="font-weight: bold">else</span> <span style="font-weight: bold">if</span> (a % 180 == 0) {
+       VGA_line(new_x, new_y, new_x, new_y + length, red);
+       new_x = new_x;
+       new_y = new_y + length;
+     } <span style="font-weight: bold">else</span> <span style="font-weight: bold">if</span> (a % 90 == 0) {
+       VGA_line(new_x, new_y, new_x + length, new_y, yellow);
+       new_x = new_x + length;
+       new_y = new_y;
+     }
+   } <span style="font-weight: bold">else</span> <span style="font-weight: bold">if</span> (input[i] == <span style="font-style: italic">&#39;+&#39;</span>) {
+     a = a + 90;
+   } <span style="font-weight: bold">else</span> <span style="font-weight: bold">if</span> (input[i] == <span style="font-style: italic">&#39;-&#39;</span>) {
+     a = a - 90;
+   }
+ }
+}
+</pre>
+			</div>
 
+		</div>
+		<br id="full-system">
+		<div class="box container">
+			<section>
+				<h2>Full-System Design</h2>
+				<h3>Structure</h3>
+				<p>Boasting a faster internal clock and configurable hardware, the FPGA is the core computational power for the
+					system. This power is directed towards two main functionalities: calculating the L-System and graphing the
+					L-System. The former relies on string manipulation, while the latter uses enable and address signals to write
+					to the VGA screen. Since this system serves two distinct purposes, it was useful to split each into a separate
+					Verilog file: <code>rules.v</code> for the calculations and <code>DE1_SoC_Computer.v</code> for the graphing.
+					This modular approach not
+					only made it simpler to visualize how each module connects, but it also made the testing process easier to
+					take step by step.</p>
+				<p>The C code running on the ARM side establishes the serial input control for the L-System’s settings, such as
+					the L-System in question and the starting coordinates for graphing. There was the opportunity to use this for
+					graphing as well, but the bandwidth and PIO port size limitations would’ve hindered our speedup. There was the
+					additional thought of housing the L-System calculations on the ARM side, but this was also scrapped due to the
+					FPGA’s faster clock frequency and opportunity for large amounts of data to be stored through M10Ks.</p>
+				<p>Bridging the gap between the ARM and FPGA is the Avalon bus, visualized and configured using QSYS. The ARM
+					takes in settings from the user and outputs them to the FPGA through output PIO ports, while the FPGA sends
+					over timing information through an input PIO port. These ports have to be programmed on both ends; the ARM
+					code memory maps their address spans, and the FPGA instantiates wires to connect the ports of the ARM module
+					(called <code>Computer_System</code> in the Verilog) to relevant inputs/outputs in Verilog modules.</p>
+				<p>The interweaving of these two technologies and the emphasis on each system’s strengths led to the development
+					of responsive, visualizable L-Systems. Figure XX below shows how each connects via input and output signals
+					and wires.</p>
+				<img src="images/signalblockdiagram.png" style="display:block;margin: 0 auto; width:70%; height:70%">
+				<br>
+				<h3>Computation</h3>
+				<p>The bulk of the code used to create these L-Systems is found in <code>rules.v</code> across four modules:
+					<code>dual_clock_ram</code>,
+					<code>signed_mult</code>, <code>rules</code>, and <code>create_system</code>.
+				</p>
+				<h4>dual_clock_ram</h4>
+				<p><code>dual_clock_ram</code> is the memory unit of our system that allows our system to be recursive. Each
+					instantiation of
+					the module is composed of eight M10k blocks in a 8-bit by 8K configuration, with each block holding one of the
+					eight blocks. The module performs one cycle writes and two cycle reads. Thus, in the cycle that a memory
+					operation is called, a write would finish the following cycle, and a read would finish after the second
+					positive edge of the clock. However, it is possible for these memops to still take the same amount of time
+					because the read and write operations are processed on different clocks, both of which are taken as inputs
+					(<code>clk1</code>, <code>clk2</code>). The other inputs are write enable (<code>we</code>),
+					<code>read_address</code>, <code>write_address</code>, and write data (<code>d</code>). The
+					sole output is read data (<code>q</code>). When graphing, this module is the limiting factor for the number of
+					iterations
+					which can be performed. With a fixed memory size, at some point, we will run out of space to write a new
+					iteration. We settled on 8K memory locations because we calibrated our system to fit a 10-11 iteration dragon
+					curve.
+				</p>
+				<h4>signed_mult</h4>
+				<p>This module performs 11.21 fixed point signed multiplication. This means that there are 11 bits of integer
+					and 21 bits of decimal in the inputs and output. Our reasoning behind 11.21 for the fixed point representation
+					was that there were ample integer bits, so as to avoid overflowing during computation. For the purposes of
+					this project, we felt the ranges of integer and floating point provided good resolution. This module is
+					instantiated in our top level code for use in calculating the necessary vertical distances for diagonal lines.
+				</p>
+				<h4>rules</h4>
+				<p><code>rules</code> is a clocked module which applies a specific update rule to an input character.
+					Specifically it takes
+					in an 8-bit character, and, depending on the specified L-system, will convert the input to an up to ten
+					character output string. To interpret the character inputs properly, the alphabet of all valid characters for
+					the available L-systems is defined with local parameters. The module operates by sitting in an initial wait
+					state until a valid signal is asserted, indicating that the input is valid. The module then transitions to the
+					appropriate update state depending on the input L-system signal. Within the specified state, only the rules of
+					that system are available. If there exists a rule for that character, the corresponding conversion will be
+					written to the result. If not, then the character is written to the result with 72 zeros appended to the end
+					to fit the ten character buffer size.
+				</p>
+				<img src="images/rules_fsm.png" style="display:block;margin: 0 auto; width:95%; height:95%">
+				<p>This scheme makes it fairly easy to add new L-Systems. We merely have to expand the alphabet and add an extra
+					state to handle this new case. Below are examples of some of the systems we generated. We currently have 7
+					systems encoded. They are the dragon curve, two versions of the Sierpinski arrowhead, Koch curve, Koch
+					snowflake, cross, and tessellated triangle.</p>
+				<img src="images/dragon_11iter_4length,300,300.png" style="display:block;margin: 0 auto; width:70%; height:70%">
+				<br>
+				<img src="images/arrow2_6iter_7length,300,300.png" style="display:block;margin: 0 auto; width:70%; height:70%">
+				<br>
+				<h4>create_system</h4>
+				<p><code>create_system</code> in particular does the heavy lifting, instantiating two
+					<code>dual_clock_ram</code> modules and
+					one <code>rules</code>
+					module in order to receive a 32-bit axiom, perform the calculations necessary to convert that starting string
+					into a set of characters representing a fractal of that requested L-System, and output the entire result
+					string byte by byte to the top level.
+				</p>
+				<p><code>create_system</code> requires a plethora of input and output values in order to function. The typical
+					one bit <code>clk</code>
+					and <code>reset</code> signals are inputs to the system, dictating when the internal FSM is allowed to restart
+					and at what
+					frequency it can run. <code>system_input_string</code> is the starting axiom, limited to 32 bits due to the
+					maximum width
+					of the PIO ports sending over this string from the HPS. A three bit signal <code>lsystem</code> chooses which
+					of the seven
+					L-Systems to calculate and graph, and four bit value <code>iterations</code> provides the number of recursive
+					iterations
+					the L-System will be required to make. As the module hops from state to state,
+					<code>system_output_string</code> is set to
+					a byte of the outputted result in order to somewhat parallelize the math being performed with the graphing
+					being done. <code>iterations_counter</code> is another output, this time four bits; it’s updated to be equal
+					to the
+					iteration <code>create_system</code> is on so as to let the top level know when it’s appropriate to graph.
+				</p>
+				<p>The handshake interface between <code>create_system</code> and the top level FSM for graphing worked with
+					four signals:
+					<code>top_rdy</code>, <code>top_graphing</code>, <code>system_val</code>, and <code>system_done</code>. Those
+					outputted by the top level—<code>top_rdy</code> and
+					<code>top_graphing</code>—were received as inputs, indicating that the top level was ready for the next byte
+					to be graphed
+					and in what stage of graphing the top level was in, respectively. <code>system_val</code> and
+					<code>system_done</code> are outputs, set
+					appropriately to show that there’s a new valid output from <code>create_system</code> and that
+					<code>create_system</code> has completed
+					its L-System entirely.
+				</p>
+				<p>Two <code>dual_clock_ram</code> modules are instantiated to hold the L-System as it passes through every
+					iteration. The
+					first loop through the L-System string is performed on the axiom, which is a hard-coded value set by the user
+					through the HPS. The expanded result string, created by running each character through the <code>rules</code>
+					module, is
+					then stored in an M10K block connected to one of the <code>dual_clock_ram</code> modules (let’s call it A).
+					The next
+					iteration takes this processed result string from A, runs each character through the <code>rules</code>
+					module, and stores
+					the new result in an M10K block created by the other <code>dual_clock_ram</code> module (designated as B).
+					From then on,
+					every iteration of <code>create_system</code> will read the previous iteration’s result from one
+					<code>dual_clock_ram</code> and write
+					the result to the other, alternating between A being read and B being written to B being read and A being
+					written. Considering that <code>iterations_counter</code>—the register used to keep track of the
+					iterations—starts at zero,
+					here’s a simple rule of thumb: every even iteration writes to A and reads from B (except in the case of the
+					zeroth iteration, which reads from axiom), and every odd iteration writes to B and reads from A. The
+					<code>dual_clock_ram</code> modules will be referred to as A and B from now on.
+				</p>
+				<p>Aptly named <code>rule</code>, an instance of the <code>rules</code> module is connected to the appropriate
+					inputs and internal
+					registers. It needs the <code>lsystem</code> input to choose the correct L-System rules to apply to each
+					character of the
+					L-System string, the character in question (stored in <code>input_char</code>), and a valid signal
+					<code>rule_val</code> to
+					indicate the
+					next character is ready to be processed. It outputs a maximum 80 bit value to <code>rule_result</code> after
+					applying the
+					relevant L-System rules to <code>input_char</code>, and a done signal <code>rule_done</code> used to
+					acknowledge that it’s
+					done
+					processing.
+				</p>
+				<p>The mechanism propelling the creation of the requested L-System is composed of 13 states, as seen in the FSM
+					below. The state logic and transitions are handled within an always block clocked on the positive triggering
+					edge of the <code>clk</code> signal.</p>
+				<img src="images/create_system_fsm.png" style="display:block;margin: 0 auto; width:95%; height:95%">
+				<br>
+				<p>The <code>reset</code> signal is active high and is sent across the PIO ports from the HPS once the user has
+					configured
+					all of the desired characteristics of the L-System. On reset, all of the internal registers (most notably the
+					read/write addresses and write enables of both A and B, and the <code>system_done</code> signal) are cleared
+					and
+					<code>system_input_string</code> is loaded into the <code>axiom</code> register. The defined
+					<code>RESET_SYSTEM</code> does this as well. The
+					difference between the actions triggered by the <code>reset</code> signal and the <code>RESET_SYSTEM</code>
+					state is that
+					the former
+					only occurs once at the very beginning of the program, and the latter is what the FSM returns to after
+					completing an L-System and waiting for the next request from the user.
+				</p>
+				<p>Both the <code>reset</code> signal condition and <code>RESET_SYSTEM</code> transition to
+					<code>CLEAR_M10KS</code> (though the latter
+					waits until
+					reset is high again, indicating the new L-System characteristics have been sent from the HPS). Since the
+					L-System strings during and between iterations are stored in M10K blocks, it’s necessary to clear them before
+					embarking on the next L-System. Until the write address values for A and B have reached the last possible
+					memory address 0h1FFF (8191 in decimal), both write enable signals are set to one and the data values set to
+					zero. This will result in every byte of the M10Ks being set to 8’b0. The state stays within itself until this
+					process is complete, then moves on to <code>GET_CHAR</code>.
+				</p>
+				<p><code>GET_CHAR</code> is responsible for grabbing the next character in the string to pass into the
+					<code>rule</code>
+					module. However,
+					it must wait until the top level is ready (equivalent to the top level finishing graphing the previous
+					character sent over from <code>create_system</code>) so it doesn’t set the value of <code>input_char</code>
+					for the <code>rules</code>
+					module until
+					the <code>top_rdy</code> signal is set to one. When this condition is met, how the state proceeds depends on
+					what iteration
+					the system is on, shown in <code>iterations_counter</code>. If the system is on the zeroth iteration, the
+					hardcoded <code>axiom</code>
+					is being processed so <code>input_char</code> is the least significant (rightmost) byte of <code>axiom</code>
+					and the FSM can
+					immediately transition to <code>COMPUTE_DRAGON</code>. If the system hasn’t reached the inputted value of
+					iterations, it
+					proceeds to <code>READ_M10K</code> to read a byte from the string written to either A or B’s M10K memory. If
+					the system has
+					performed the required number of iterations, the FSM goes to <code>DONE</code>.
+				</p>
+				<p><code>READ_M10K</code> chooses which set of M10Ks to read from based on whether
+					<code>iterations_counter</code> is even or odd. Based
+					on the setup of the <code>dual_clock_ram</code>, there’s no read enable signal; instead it takes three cycles
+					to read the
+					requested address in the M10K. Originally, we thought this meant our FSM would require some number of buffer
+					states to ensure three clock cycles passed before the value was ready to be used, but the fact that our FSM is
+					13 states means that enough time passes between individual characters being processed to absorb those three
+					clock cycles. We take advantage of this by incrementing the read address for the appropriate
+					<code>dual_clock_ram</code>
+					module within <code>READ_M10K</code> based on whether <code>iterations_counter</code> is even or odd. Since
+					this is the
+					only state to
+					change the value of the read addresses, A and B will read at their corresponding incremented address and the
+					value at that address will be ready to grab the next time the FSM goes to <code>READ_M10K</code>.
+				</p>
+				<p>Whether from <code>GET_CHAR</code> directly or <code>READ_M10K</code>, the next state of the FSM is
+					<code>COMPUTE_DRAGON</code>. Don’t
+					let the name
+					fool you, as this state is responsible for getting the resulting output from applying any of the seven
+					L-System rule configurations, not just that of the dragon curve. The <code>rule_val</code> signal is set to
+					tell <code>rule</code> that
+					another character is on its way, and <code>rule_result</code> is stored in another register to be shifted in
+					future states
+					of the FSM. While the done signal <code>rule_done</code> is equal to zero, the FSM stays in
+					<code>COMPUTE_DRAGON</code>,
+					waiting for the
+					<code>rule</code> module to finish processing the character. When this isn’t the case, it’s time to write the
+					result to the
+					M10Ks: A through state <code>WRITE_M10K_A</code> if <code>iterations_counter</code> is even, or B through
+					state
+					<code>WRITE_M10K_B</code> if
+					<code>iterations_counter</code> is odd.
+				</p>
+				<p><code>WRITE_M10K_A</code> and <code>WRITE_M10K_B</code> are identical, save for the fact that they’re dealing
+					with two different
+					<code>dual_clock_ram</code> modules. As each memory location in the M10Ks is a byte wide, we take the most
+					significant
+					(leftmost) byte of <code>rule_result_reg</code> (note that this is not <code>rule_result</code>) and load it
+					into either A or B’s data
+					register as well as <code>system_output_string</code>. Every rule applied to the characters can output a
+					maximum of ten
+					bytes from a single byte input, so it takes multiple cycles to write the entirety of
+					<code>rule_result_reg</code> to the
+					M10Ks. The simplest way to keep track of which bytes had been written back and which ones hadn’t is by
+					shifting out each byte of <code>rule_result_reg</code> after it’s written to its appropriate location in the
+					M10Ks. Hence,
+					we know the entirety of the output from rule is stored in memory once <code>rule_result_reg</code> equals 80
+					bit zero; in
+					this case, the write enable is set low so as to not accidentally write to any extra memory locations,
+					<code>system_val</code> is set low to indicate that there isn’t a character to be graphed by the top level,
+					and the FSM
+					transitions to <code>NEXT_BYTE</code>. If there are more bytes in <code>rule_result_reg</code> to write to the
+					M10Ks, the
+					write enable
+					is set high and the <code>top_rdy</code> is checked. <code>top_rdy</code> lets <code>create_system</code> know
+					when the top
+					level has
+					finished
+					handling the previous character sent to it and is ready for the next. When <code>top_rdy</code> is high,
+					<code>system_val</code> is set
+					high in response to say “Hey, we have a new character ready for you!” and the FSM transitions to
+					<code>INCREMENT_WRITE_A</code> (or <code>INCREMENT_WRITE_B</code> when in <code>WRITE_M10K_B</code>, writing
+					to the B <code>dual_clock_ram</code>).
+					Otherwise,
+					<code>system_val</code> is kept low and the FSM stays within <code>WRITE_M10K_A</code>.
+				</p>
+				<p>The goal for this val/rdy handshake is to not let one part of the system get ahead of the other. We don’t
+					want <code>create_system</code> to continue chugging along with processing and storing the result string
+					before the top
+					level is done with the previous character. We also don’t want the top level to graph a character that isn’t
+					ready yet, lest it mess up the final design of the L-System.</p>
+				<p>Much like <code>WRITE_M10K_A</code> and <code>WRITE_M10K_B</code>, <code>INCREMENT_WRITE_A</code> and
+					<code>INCREMENT_WRITE_B</code> are the same except for what
+					<code>dual_clock_ram</code> they’re interfacing with. This state is responsible for incrementing either A or
+					B’s write
+					address so that the next time the FSM is in <code>WRITE_M10K_A</code> or <code>WRITE_M10K_B</code> it knows to
+					write to the next
+					available location in memory. It’s also responsible for shifting <code>rule_result_reg</code>. Since the
+					baseline Python
+					code looped across each string from left to right, so does this Verilog implementation by shifting the
+					leftmost byte out. The FSM immediately transitions back to <code>WRITE_M10K_A</code> or
+					<code>WRITE_M10K_B</code>.
+				</p>
+				<p>After the entirety of <code>rule_result_reg</code> has been stored in the appropriate
+					<code>dual_clock_ram</code> module,
+					<code>NEXT_BYTE</code> is
+					responsible for shifting <code>axiom</code> in a similar fashion to <code>rule_result_reg</code>. As described
+					earlier,
+					<code>axiom</code> holds the
+					32 bit hardcoded axiom for the L-System and is the starting point for the zeroth iteration of
+					<code>create_system</code>.
+					Once every character of <code>axiom</code> has gone through the <code>rules</code> module, it can be shifted
+					out because
+					there is no use
+					for it anymore—its result is all the system needs to remember about it, and that’s already been written to the
+					M10Ks. In any iteration besides the zeroth, this acts more like a buffer state than anything else, but it also
+					serves to hold the <code>system_val</code> and <code>system_done</code> signals low, which are easy to lose
+					track of.
+				</p>
+				<p>The next state is <code>INCREMENT_ITER</code>; as the name implies, it’s responsible for incrementing the
+					value of
+					<code>iterations_counter</code> once the entirety of the string has been processed. There are many checks that
+					must be done
+					before this simple task can happen, since there are multiple cycles within the FSM and the iterations
+					themselves are cycles. First, <code>system_output_string</code> must be zero, <code>axiom</code> must be zero,
+					and
+					<code>top_graphing</code> must be
+					two. <code>system_output_string</code> being zero means that the last value of <code>rule_result_reg</code> is
+					zero and the
+					entirety of
+					the string has been processed and shifted out, with <code>system_output_string</code> lagging and grabbing an
+					extra byte of
+					<code>rule_result_reg</code> in <code>WRITE_M10K_A/B</code> while waiting to go to <code>NEXT_BYTE</code>.
+					<code>axiom</code> is zero once the zeroth
+					iteration
+					has reached its end, so this check makes sure that the system has at least gotten through that.
+					<code>top_graphing</code>
+					is an input from the top level showing what state of graphing the top level is in: 0 before a character is
+					graphed, 1 during graphing, and 2 post-graphing. A value of 2 means that the last character sent over by
+					<code>create_system</code> has been fully graphed. The next check depends on <code>iterations_counter</code>:
+					if it’s zero,
+					no
+					additional logic is needed; if it’s even, B needs to be reading a value of zero; and if it’s odd, A needs to
+					be reading a value of zero. This is a check to see if there are more bytes to be read and processed from the
+					M10Ks (hence why on the zeroth iteration this doesn’t require any logic) since all bytes in the M10Ks
+					following the last byte of the processed string will be zero (as promised by <code>CLEAR_M10KS</code>). If
+					those hurdles
+					are cleared, it’s time for <code>iterations_counter</code> to be incremented and the write addresses for both
+					<code>dual_clock_ram</code> modules to be zeroed out. This ensures that the next iteration will write the
+					result from the
+					top of the M10Ks, overwriting the previous iteration and even going past that (since every iteration grows the
+					string in length). The next state will be <code>ZERO_READ</code> if all of the conditionals are true,
+					otherwise no logic is
+					performed at all and the FSM heads back to <code>GET_CHAR</code> to start the processing and storing of the
+					next character
+					in the string.
+				</p>
+				<p><code>ZERO_READ</code> is also self-explanatory: it zeroes the read addresses for the
+					<code>dual_clock_ram</code> modules.
+					The read
+					address for B is only set to zero if the system is on an even-numbered iteration, otherwise the read address
+					for A is set to zero. This state transitions to <code>GET_CHAR</code>.
+				</p>
+				<p>The last state of the FSM is <code>DONE</code>. Its primary function is to set the <code>system_done</code>
+					signal to one
+					in order to
+					let the top level know not to expect any more characters from <code>create_system</code> as it has completed
+					the requested
+					number of iterations over the L-System string. The read/write addresses for A and B are set to zero to prepare
+					to handle the next L-System after heading back to <code>RESET_SYSTEM</code>.</p>
 			</section>
 		</div>
-
-
 		<footer class="major container medium">
 			<h3>Get shady with science</h3>
 			<p>Vitae natoque dictum etiam semper magnis enim feugiat amet curabitur tempor orci penatibus. Tellus erat mauris
