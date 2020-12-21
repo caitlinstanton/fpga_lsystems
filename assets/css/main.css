@@ -9,6 +9,10 @@
 
 /* Sidebar */
 
+p code {
+	font-family:'Courier New', Courier, monospace;
+}
+
 #sidebar {
 	padding: 2.5em 2.5em 0.5em 2.5em ;
 	background: #312450;

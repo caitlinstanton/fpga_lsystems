@@ -7,7 +7,7 @@
 <html>
 
 <head>
-	<title>Directive by HTML5 UP</title>
+	<title>FPGA L-Systems</title>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
 	<link rel="stylesheet" href="assets/css/main.css" />
@@ -18,10 +18,8 @@
 	<!-- Header -->
 	<div id="header">
 		<span class="logo icon fa-paper-plane"></span>
-		<h1>Hi. This is Directive.</h1>
-		<p>A responsive HTML5 + CSS3 site template designed by <a href="http://html5up.net">HTML5 UP</a>
-			<br />
-			and released for free under the <a href="http://html5up.net/license">Creative Commons license</a>.
+		<h1>Graphing L-Systems on the FPGA</h1>
+		<p></a>.
 		</p>
 	</div>
 
@@ -32,9 +30,9 @@
 			<div class="inner">
 				<nav>
 					<ul>
-						<li><a href="#intro">Welcome</a></li>
-						<li><a href="#one">Who we are</a></li>
-						<li><a href="#two">What we do</a></li>
+						<li><a href="#intro">Introduction</a></li>
+						<li><a href="#high-level">High-Level Design</a></li>
+						<li><a href="#baseline">Baseline Design</a></li>
 						<li><a href="#three">Get in touch</a></li>
 					</ul>
 				</nav>
@@ -42,19 +40,13 @@
 		</section>
 
 		<header class="major container medium">
-			<h2>We conduct experiments that
-				<br />
-				may or may not seriously
-				<br />
-				break the universe
-			</h2>
-			<!--
-					<p>Tellus erat mauris ipsum fermentum<br />
-					etiam vivamus nunc nibh morbi.</p>
-					-->
+			<p>We implemented naturally recursive Lindenmayer systems (commonly known as fractals) on an Intel Altera board to
+				graph on a VGA screen. Our system proved to be faster than pure software programs written in both Python and
+				C.</p>
 		</header>
 
-		<div class="box alt container">
+		<!-- <div class="box alt container">
+
 			<section class="feature left">
 				<a href="#" class="image icon solid fa-signal"><img src="images/pic01.jpg" alt="" /></a>
 				<div class="content">
@@ -79,150 +71,199 @@
 						mauris ipsum fermentum etiam vivamus eget. Nunc nibh morbi quis fusce lacus.</p>
 				</div>
 			</section>
+		</div> -->
+
+		<br id="intro">
+		<div class="box container">
+			<section>
+				<header>
+					<h2>Introduction</h2>
+				</header>
+				<p>There are dozens of L-Systems in existence, and for this project we implemented seven. Each was configurable
+					via the number of iterations the system performed, the axiom to begin with, the size and color of the lines,
+					and the starting coordinates of the system.
+				</p>
+				<ul>
+					<li>Dragon curve</li>
+					<li>Two versions of the Sierpinski arrowhead</li>
+					<li>Two versions of the Koch curve</li>
+					<li>Cross</li>
+					<li>Tessellated triangles</li>
+				</ul>
+				<p>This project was composed of two subsystems: Verilog code for the FPGA to calculate the L-Systems and graph
+					the result, and the C code for the HPS to interface with the user. The FPGA has a faster system clock
+					frequency and, considering the generation of L-Systems is computationally intensive, it made sense to offload
+					that onto the faster, hardware-based part of the Altera board. Graphing on the VGA screen isn’t something
+					that’s limited to the FPGA itself, but bandwidth would’ve been a limiting factor when transmitting large
+					chunks of data from the FPGA to the HPS. With this in mind, graphing was kept to the FPGA, where the results
+					were already being calculated. The HPS was instead utilized for its terminal interface, where the user was
+					able to configure the L-System to be graphed. Any system settings were communicated to the FPGA via PIO ports
+					to use in its computations. </p>
+			</section>
+		</div>
+		<br id="high-level">
+		<div class="box container">
+			<section>
+				<header>
+					<h2>High-Level Design</h2>
+				</header>
+				<p>The formal definition of a Lindenmayer System (or L-System) is “a parallel rewriting system and a type of
+					formal grammar.” In simpler terms, L-Systems generate fractals, which are never-ending complex patterns that
+					are self similar at different scales such that zooming in or out will still show the same fractal pattern.
+				</p>
+				<p>There are three main components to every L-System: an alphabet, an axiom, and rules. These configure and
+					manipulate the strings of characters that define how the visualization should act, such as moving forward,
+					turning 90 degrees to the right, or branching out from a previous state. The alphabet is the set of valid
+					symbols that can be included in these strings; for example, an alphabet of {A, B} restricts any valid sentence
+					to only contain A and B. The axiom sets the initial value for the system’s string; working within the system
+					with alphabet {A, B}, an axiom could be “A.” Rules change the string recursively, generating new strings
+					repeatedly and providing actions to control the movements of the growing visualization. They’re structured to
+					take in a predecessor and a successor—the former is the input and the latter is the output after having the
+					rule applied to it. A rule to our {A, B} system with axiom A could be “A → AB”; this would take our initial
+					state and create the string “AB” for the next state.
+				</p>
+				<p>The alphabet for every phase of our design, no matter the coding language, consists of the following symbols,
+					as shown in Table 1. Each symbol corresponds to a specific action, from graphing (which are consistent across
+					L-Systems) to buffer characters for rule generation (specific to each L-System).</p>
+				<img src="images/pic01.jpg" style="display:block;margin: 0 auto;">
+				<br>
+				<p>Though there is an infinite number of combinations of axioms and rules within the given alphabet, the seven
+					L-Systems we developed have preset values for each. We followed these so as to ensure the graphed results
+					would match what was expected. Table 2 shows the axioms and rules for each L-System.</p>
+				<img src="images/pic01.jpg" style="display:block;margin: 0 auto;">
+				<br>
+			</section>
+		</div>
+		<br id="baseline">
+		<div class="box container">
+			<section>
+				<h2>Baseline Design</h2>
+				<p>Considering L-Systems have multiple moving parts, the most straightforward way to understand their inner
+					mechanisms comes from our baseline designs.
+				</p>
+				<h3>Python</h3>
+				<p>This Python code is an off-the-shelf implementation that we extended to incorporate the axioms and rules for
+					our specific L-Systems. It uses a dictionary of rules—key-value pairs where the key is the character to apply
+					to rule to and the value is the output string for that character—and locally declared <code>axiom</code>,
+					<code>iterations</code>,
+					<code>angle</code>, and <code>step</code> variables to iterate over a starting axiom and graph the resulting
+					L-System using pygame. This
+					is accomplished with several functions, each of which helped build the foundations for our C code and
+					eventually our Verilog design.
+				</p>
+				<p><code>applyRule</code> is responsible for taking in a single character and converting it to the output string
+					as specified
+					in the <code>rules</code> dictionary. It uses a for loop through every entry in <code>rules</code> to see if
+					any key matches the <code>input</code>
+					character. If a rule exists for this specific character, the result string is set to that rule’s value,
+					otherwise the result string is the original character. This exemplifies how not every character will be
+					expanded through a rule—at the very least it’ll just be copied into the resulting output string.</p>
+				<!-- HTML generated using hilite.me -->
+				<div
+					style="background: #ffffff; overflow:auto;width:auto;border:solid gray;border-width:.1em .1em .1em .8em;padding:.2em .6em;">
+					<pre style="margin: 0; line-height: 125%"><span style="font-weight: bold">def</span> applyRule(input):
+   output = <span style="font-style: italic">&quot;&quot;</span>
+   <span style="font-weight: bold">for</span> rule, result <span style="font-weight: bold">in</span> rules.items(
+   ):  <span style="font-style: italic"># applying the rule by checking the current char against it</span>
+       <span style="font-weight: bold">if</span> (input == rule):
+           output = result  <span style="font-style: italic"># Rule 1</span>
+           <span style="font-weight: bold">break</span>
+       <span style="font-weight: bold">else</span>:
+           output = input  <span style="font-style: italic"># else ( no rule set ) output = the current char -&gt; no rule was applied</span>
+   <span style="font-weight: bold">return</span> output
+</pre>
+				</div>
+				<br>
+				<p>The next function is <code>processString</code>. Rather than take an individual character as input, it
+					receives an entire
+					string to process. Every character must be handled in order to see if a rule can apply to it, so a for loop
+					runs over every character and sends each to <code>applyRule</code>. The new string is built up with each call
+					to <code>applyRule</code>,
+					creating a string that will have grown in length from the original.</p>
+				<!-- HTML generated using hilite.me -->
+				<div
+					style="background: #ffffff; overflow:auto;width:auto;border:solid gray;border-width:.1em .1em .1em .8em;padding:.2em .6em;">
+					<pre style="margin: 0; line-height: 125%"><span style="font-weight: bold">def</span> processString(oldStr):
+   newstr = <span style="font-style: italic">&quot;&quot;</span>
+   <span style="font-weight: bold">for</span> character <span style="font-weight: bold">in</span> oldStr:
+       newstr = newstr + applyRule(character)  <span style="font-style: italic"># build the new string</span>
+   <span style="font-weight: bold">return</span> newstr
+</pre>
+				</div>
+				<br>
+				<p><code>createSystem</code> puts the previous two functions together to bring iterations into the mix. It takes
+					in <code>axiom</code> and
+					<code>numIters</code> as inputs, where the former is the starting string for the L-System and the latter is
+					the specified
+					number of iterations to process the string by. While <code>processString</code> does grow the string as it
+					loops over every
+					character, <code>createSystem</code> is responsible for repeating this process multiple times from iteration
+					number zero to
+					iteration number <code>numIters</code>-1. With each iteration, it takes the string from the previous iteration
+					and puts it
+					into <code>processString</code>, storing the result so that the next iteration can use it.
+				</p>
+				<!-- HTML generated using hilite.me -->
+				<div
+					style="background: #ffffff; overflow:auto;width:auto;border:solid gray;border-width:.1em .1em .1em .8em;padding:.2em .6em;">
+					<pre style="margin: 0; line-height: 125%"><span style="font-weight: bold">def</span> createSystem(numIters, axiom):
+   startString = axiom
+   endString = <span style="font-style: italic">&quot;&quot;</span>
+   <span style="font-weight: bold">for</span> i <span style="font-weight: bold">in</span> range(numIters):  <span style="font-style: italic"># iterate with applying the rules</span>
+       print(<span style="font-style: italic">&quot;Iteration: {0}&quot;</span>.format(i))
+       endString = processString(startString)
+       startString = endString
+   <span style="font-weight: bold">return</span> endString
+</pre>
+				</div>
+				<br>
+				<p>With the L-System string built through <code>createSystem</code>, <code>drawTree</code> is able to graph the
+					L-System using pygame. It
+					takes in the L-System string and the starting coordinates from which to graph. It then uses a loop to look at
+					every character in the string to determine what (if any) graphing functionality it needs to provide. If it
+					sees an ‘A’ or ‘F’ it draws forward by the length determined by <code>step</code>. If it sees a ‘+’ it
+					increments the
+					orientation of the system by <code>angle</code>, and similarly decrements the orientation of the system by
+					<code>angle</code> if it sees
+					a ‘-’. ‘X’ and ‘Y’ aren’t graphing characters so they, and any other characters not equal to ‘A’, ‘F’, ‘+’, or
+					‘-’, are skipped over.
+				</p>
+				<!-- HTML generated using hilite.me -->
+				<div
+					style="background: #ffffff; overflow:auto;width:auto;border:solid gray;border-width:.1em .1em .1em .8em;padding:.2em .6em;">
+					<pre style="margin: 0; line-height: 125%"><span style="font-weight: bold">def</span> drawTree(input, oldpos):
+   a = 0  <span style="font-style: italic"># angle</span>
+   i = 0  <span style="font-style: italic"># counter for process calculation</span>
+   processOld = 0  <span style="font-style: italic"># old process</span>
+   newpos = oldpos
+   color = (255, 255, 255)
+   linesize = 1
+   <span style="font-weight: bold">for</span> character <span style="font-weight: bold">in</span> input:  <span style="font-style: italic"># process for drawing the l-system by writing the string to the screen</span>
+ 
+       i += 1  <span style="font-style: italic"># print process in percent</span>
+       process = i * 100 / len(input)
+       <span style="font-weight: bold">if</span> <span style="font-weight: bold">not</span> process == processOld:
+           <span style="font-style: italic"># print(process, &quot;%&quot;)</span>
+           processOld = process
+ 
+       <span style="font-weight: bold">if</span> character == <span style="font-style: italic">&#39;A&#39;</span>:  <span style="font-style: italic"># magic happens here</span>
+           newpos = polar_to_cart(a + angleoffset, step, *oldpos)
+           pygame.draw.line(screen, color, oldpos, newpos, linesize)
+           oldpos = newpos
+       <span style="font-weight: bold">elif</span> character == <span style="font-style: italic">&#39;F&#39;</span>:
+           newpos = polar_to_cart(a + angleoffset, step, *oldpos)
+           pygame.draw.line(screen, color, oldpos, newpos, linesize)
+           oldpos = newpos
+       <span style="font-weight: bold">elif</span> character == <span style="font-style: italic">&#39;+&#39;</span>:
+           a += angle
+       <span style="font-weight: bold">elif</span> character == <span style="font-style: italic">&#39;-&#39;</span>:
+           a -= angle
+</pre>
+				</div>
+
+			</section>
 		</div>
 
-		<!--
-				<div class="box container">
-					<header>
-						<h2>A lot of generic stuff</h2>
-					</header>
-					<section>
-						<header>
-							<h3>Paragraph</h3>
-							<p>This is the subtitle for this particular heading</p>
-						</header>
-						<p>Phasellus nisl nisl, varius id <sup>porttitor sed pellentesque</sup> ac orci. Pellentesque
-						habitant <strong>strong</strong> tristique <b>bold</b> et netus <i>italic</i> malesuada <em>emphasized</em> ac turpis egestas. Morbi
-						leo suscipit ut. Praesent <sub>id turpis vitae</sub> turpis pretium ultricies. Vestibulum sit
-						amet risus elit.</p>
-					</section>
-					<section>
-						<header>
-							<h3>Blockquote</h3>
-						</header>
-						<blockquote>Fringilla nisl. Donec accumsan interdum nisi, quis tincidunt felis sagittis eget.
-						tempus euismod. Vestibulum ante ipsum primis in faucibus.</blockquote>
-					</section>
-					<section>
-						<header>
-							<h3>Divider</h3>
-						</header>
-						<p>Donec consectetur vestibulum dolor et pulvinar. Etiam vel felis enim, at viverra
-						ligula. Ut porttitor sagittis lorem, quis eleifend nisi ornare vel. Praesent nec orci
-						facilisis leo magna. Cras sit amet urna eros, id egestas urna. Quisque aliquam
-						tempus euismod. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices
-						posuere cubilia.</p>
-						<hr />
-						<p>Donec consectetur vestibulum dolor et pulvinar. Etiam vel felis enim, at viverra
-						ligula. Ut porttitor sagittis lorem, quis eleifend nisi ornare vel. Praesent nec orci
-						facilisis leo magna. Cras sit amet urna eros, id egestas urna. Quisque aliquam
-						tempus euismod. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices
-						posuere cubilia.</p>
-					</section>
-					<section>
-						<header>
-							<h3>Unordered List</h3>
-						</header>
-						<ul class="default">
-							<li>Donec consectetur vestibulum dolor et pulvinar. Etiam vel felis enim, at viverra ligula. Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</li>
-							<li>Donec consectetur vestibulum dolor et pulvinar. Etiam vel felis enim, at viverra ligula. Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</li>
-							<li>Donec consectetur vestibulum dolor et pulvinar. Etiam vel felis enim, at viverra ligula. Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</li>
-							<li>Donec consectetur vestibulum dolor et pulvinar. Etiam vel felis enim, at viverra ligula. Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</li>
-						</ul>
-					</section>
-					<section>
-						<header>
-							<h3>Ordered List</h3>
-						</header>
-						<ol class="default">
-							<li>Donec consectetur vestibulum dolor et pulvinar. Etiam vel felis enim, at viverra ligula. Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</li>
-							<li>Donec consectetur vestibulum dolor et pulvinar. Etiam vel felis enim, at viverra ligula. Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</li>
-							<li>Donec consectetur vestibulum dolor et pulvinar. Etiam vel felis enim, at viverra ligula. Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</li>
-							<li>Donec consectetur vestibulum dolor et pulvinar. Etiam vel felis enim, at viverra ligula. Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</li>
-						</ol>
-					</section>
-					<section>
-						<header>
-							<h3>Table</h3>
-						</header>
-						<div class="table-wrapper">
-							<table class="default">
-								<thead>
-									<tr>
-										<th>ID</th>
-										<th>Name</th>
-										<th>Description</th>
-										<th>Price</th>
-									</tr>
-								</thead>
-								<tbody>
-									<tr>
-										<td>45815</td>
-										<td>Something</td>
-										<td>Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</td>
-										<td>29.99</td>
-									</tr>
-									<tr>
-										<td>24524</td>
-										<td>Nothing</td>
-										<td>Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</td>
-										<td>19.99</td>
-									</tr>
-									<tr>
-										<td>45815</td>
-										<td>Something</td>
-										<td>Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</td>
-										<td>29.99</td>
-									</tr>
-									<tr>
-										<td>24524</td>
-										<td>Nothing</td>
-										<td>Ut porttitor sagittis lorem, quis eleifend nisi ornare vel.</td>
-										<td>19.99</td>
-									</tr>
-								</tbody>
-								<tfoot>
-									<tr>
-										<td colspan="3"></td>
-										<td>100.00</td>
-									</tr>
-								</tfoot>
-							</table>
-						</div>
-					</section>
-					<section>
-						<header>
-							<h3>Form</h3>
-						</header>
-						<form method="post" action="#">
-							<div class="row">
-								<div class="col-6 col-12-mobilep">
-									<label for="name">Name</label>
-									<input class="text" type="text" name="name" id="name" value="" placeholder="John Doe" />
-								</div>
-								<div class="col-6 col-12-mobilep">
-									<label for="email">Email</label>
-									<input class="text" type="text" name="email" id="email" value="" placeholder="johndoe@domain.tld" />
-								</div>
-								<div class="col-12">
-									<label for="subject">Subject</label>
-									<input class="text" type="text" name="subject" id="subject" value="" placeholder="Enter your subject" />
-								</div>
-								<div class="col-12">
-									<label for="subject">Message</label>
-									<textarea name="message" id="message" placeholder="Enter your message" rows="6"></textarea>
-								</div>
-								<div class="col-12">
-									<ul class="actions special">
-										<li><input type="submit" value="Send" /></li>
-										<li><input type="reset" value="Reset" class="alt" /></li>
-									</ul>
-								</div>
-							</div>
-						</form>
-					</section>
-				</div>
-				-->
 
 		<footer class="major container medium">
 			<h3>Get shady with science</h3>
